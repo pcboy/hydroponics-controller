@@ -1,14 +1,22 @@
 
 #include <Arduino.h>
 
+// Temperature sensor
+#include <DallasTemperature.h>
+#include <OneWire.h>
+#define ONE_WIRE_BUS 13
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
 #define TdsSensorPin 32
+
 #define TdsRelayPin 33
 #define VREF 3.3 // analog reference voltage(Volt) of the ADC
 #define SCOUNT 30 // sum of sample point
 int analogBuffer[SCOUNT]; // store the analog value in the array, read from ADC
 int analogBufferTemp[SCOUNT];
 int analogBufferIndex = 0, copyIndex = 0;
-float averageVoltage = 0, tdsValue = 0, temperature = 19;
+float averageVoltage = 0, tdsValue = 0;
 
 void setupTDSMeter()
 {
@@ -52,6 +60,13 @@ void turnOffTDS()
     digitalWrite(TdsRelayPin, LOW);
 }
 
+float getTemperature()
+{
+    sensors.begin();
+    sensors.requestTemperatures();
+    return sensors.getTempCByIndex(0);
+}
+
 // return tds value
 float getTDSValue()
 {
@@ -70,6 +85,8 @@ float getTDSValue()
             if (analogBufferIndex == SCOUNT) {
                 for (copyIndex = 0; copyIndex < SCOUNT; copyIndex++)
                     analogBufferTemp[copyIndex] = analogBuffer[copyIndex];
+
+                float temperature = getTemperature();
                 averageVoltage = getMedianNum(analogBufferTemp, SCOUNT) * (float)VREF / 1024.0; // read the analog value more stable by the median filtering algorithm, and convert to voltage value
                 float compensationCoefficient = 1.0 + 0.02 * (temperature - 25.0); //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.02*(fTP-25.0));
                 float compensationVoltage = averageVoltage / compensationCoefficient; //temperature compensation

@@ -22,6 +22,9 @@ const char* password = WIFI_PASSWORD;
 #define ARDUINO_RUNNING_CORE 1
 #endif
 
+int waiting = 0;
+bool turnOn = true;
+
 void loopPump(void* pvParameters);
 
 void send_notification(int value)
@@ -66,6 +69,7 @@ void OTASetup()
         })
         .onEnd([]() {
             Serial.println("\nEnd");
+            ESP.restart();
         })
         .onProgress([](unsigned int progress, unsigned int total) {
             Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
@@ -91,17 +95,14 @@ void setupBlynk()
 {
     char auth[] = BLYNK_TOKEN;
     Blynk.begin(auth, ssid, password);
-}
-
-BLYNK_CONNECTED()
-{
-    OTASetup();
     Blynk.syncAll();
 }
 
 void setupPump(void)
 {
     pinMode(relayPumpPin, OUTPUT);
+    turnOn = true;
+    waiting = 0;
 }
 
 void setup(void)
@@ -120,6 +121,7 @@ void setup(void)
     }
     Serial.print("connected");
 
+    OTASetup();
     setupBlynk();
     setupPump();
     setupTDSMeter();
@@ -127,9 +129,6 @@ void setup(void)
     xTaskCreatePinnedToCore(loopTDSMeter, "loopTDSMeter", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
     xTaskCreatePinnedToCore(loopPump, "loopPump", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
 }
-
-int waiting = 0;
-bool turnOn = true;
 
 void turnPumpOff()
 {
@@ -164,6 +163,8 @@ void loopTDSMeter(void* pvParameters)
         Serial.println("loopTDSMeter waiting...");
         tdsVal = getTDSValue();
         Blynk.virtualWrite(V0, tdsVal);
+        Blynk.virtualWrite(V2, getTemperature());
+
         delay(5UL * 60UL * 60UL * 1000UL); // 5 hours wait
 
         // If the pump is currently ON wait a bit for the pump to finish before sampling
@@ -176,10 +177,15 @@ void loopTDSMeter(void* pvParameters)
 
 void loopPump(void* pvParameters)
 {
+    turnOn = true;
+    waiting = 0;
+
     while (42) {
+
         if (turnOn == true) {
             if (waiting < 60) {
                 digitalWrite(relayPumpPin, HIGH);
+
             } else {
                 turnPumpOff();
                 //send_notification(turnOn);
