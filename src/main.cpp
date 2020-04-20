@@ -27,16 +27,13 @@ bool turnOn = true;
 
 void loopPump(void* pvParameters);
 
-void send_notification(int value)
+void send_notification(String key, String value)
 {
-    if (value < 0)
-        return;
-
     HTTPClient http;
     http.begin(INFLUXDB_URI);
     http.addHeader("Content-Type", "text/plain");
     http.setAuthorization(INFLUXDB_USER, INFLUXDB_PASSWORD);
-    http.POST("hydroponicsController,device=hydroponicsController temp=" + String(value));
+    http.POST("hydroponicsController,device=hydroponicsController " + key + "=" + value);
     http.end();
     Serial.println("Notification sent: " + value);
 }
@@ -134,6 +131,7 @@ void turnPumpOff()
 {
     turnOn = false;
     waiting = 0;
+    send_notification("pump", String(0));
     Blynk.virtualWrite(V1, LOW);
 }
 
@@ -141,6 +139,8 @@ void turnPumpOn()
 {
     turnOn = true;
     waiting = 0;
+    send_notification("pump", String(1));
+
     Blynk.virtualWrite(V1, HIGH);
 }
 
@@ -165,6 +165,9 @@ void loopTDSMeter(void* pvParameters)
         Blynk.virtualWrite(V0, tdsVal);
         Blynk.virtualWrite(V2, getTemperature());
 
+        send_notification("tds", String(tdsVal));
+        send_notification("temp", String(getTemperature()));
+
         delay(5UL * 60UL * 60UL * 1000UL); // 5 hours wait
 
         // If the pump is currently ON wait a bit for the pump to finish before sampling
@@ -181,14 +184,12 @@ void loopPump(void* pvParameters)
     waiting = 0;
 
     while (42) {
-
         if (turnOn == true) {
             if (waiting < 60) {
                 digitalWrite(relayPumpPin, HIGH);
-
             } else {
                 turnPumpOff();
-                //send_notification(turnOn);
+                //esp_deep_sleep(15 * 60 * 1000 * 1000); // 15 minutes
             }
         }
 
@@ -197,7 +198,6 @@ void loopPump(void* pvParameters)
                 digitalWrite(relayPumpPin, LOW);
             } else {
                 turnPumpOn();
-                //send_notification(turnOn);
             }
         }
 
