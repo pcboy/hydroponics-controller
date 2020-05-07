@@ -62,7 +62,9 @@ void turnOffTDS()
 
 float getTemperature()
 {
+    delay(1000);
     sensors.begin();
+    delay(1000);
     sensors.requestTemperatures();
     return sensors.getTempCByIndex(0);
 }

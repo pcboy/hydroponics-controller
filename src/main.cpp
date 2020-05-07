@@ -12,9 +12,13 @@
 
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
+
 #define INFLUXDB_URI "http://192.168.1.113:8086/write?db=hydroponicsController"
 #define INFLUXDB_USER "hydroponics"
 #define INFLUXDB_PASSWORD "hydroponics"
+
+#define WIFI_TIMEOUT_MS 20000 // 20 second WiFi connection timeout
+#define WIFI_RECOVER_TIME_MS 30000 // Wait 30 seconds after a failed connection attempt
 
 #if CONFIG_FREERTOS_UNICORE
 #define ARDUINO_RUNNING_CORE 0
@@ -25,6 +29,7 @@ const char* password = WIFI_PASSWORD;
 int waiting = 0;
 bool turnOn = true;
 
+void loopWifiKeepAlive(void* pvParameters);
 void loopPump(void* pvParameters);
 
 void send_notification(String key, String value)
@@ -123,6 +128,7 @@ void setup(void)
     setupPump();
     setupTDSMeter();
 
+    xTaskCreatePinnedToCore(loopWifiKeepAlive, "loopWifiKeepAlive", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
     xTaskCreatePinnedToCore(loopTDSMeter, "loopTDSMeter", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
     xTaskCreatePinnedToCore(loopPump, "loopPump", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
 }
@@ -152,6 +158,35 @@ BLYNK_WRITE(V1) // Button to turn the pump on/off
         turnPumpOn();
     } else {
         turnPumpOff();
+    }
+}
+
+void loopWifiKeepAlive(void* pvParameters)
+{
+    while (42) {
+        if (WiFi.status() == WL_CONNECTED) {
+            vTaskDelay(10000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        Serial.println("[WIFI] Connecting");
+        //WiFi.mode(WIFI_STA);
+        WiFi.begin(ssid, password);
+
+        unsigned long startAttemptTime = millis();
+
+        // Keep looping while we're not connected and haven't reached the timeout
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS);
+
+        // When we couldn't make a WiFi connection (or the timeout expired)
+        // sleep for a while and then retry.
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("[WIFI] FAILED");
+            vTaskDelay(WIFI_RECOVER_TIME_MS / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        Serial.println("[WIFI] Connected: " + WiFi.localIP());
     }
 }
 
