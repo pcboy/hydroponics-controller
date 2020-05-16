@@ -126,7 +126,6 @@ void setup(void)
     OTASetup();
     setupBlynk();
     setupPump();
-    setupTDSMeter();
 
     xTaskCreatePinnedToCore(loopWifiKeepAlive, "loopWifiKeepAlive", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
     xTaskCreatePinnedToCore(loopTDSMeter, "loopTDSMeter", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
@@ -176,7 +175,8 @@ void loopWifiKeepAlive(void* pvParameters)
         unsigned long startAttemptTime = millis();
 
         // Keep looping while we're not connected and haven't reached the timeout
-        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS);
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS)
+            ;
 
         // When we couldn't make a WiFi connection (or the timeout expired)
         // sleep for a while and then retry.
@@ -192,16 +192,17 @@ void loopWifiKeepAlive(void* pvParameters)
 
 void loopTDSMeter(void* pvParameters)
 {
+    TDSMeter meter;
+
     while (42) {
-        float tdsVal = 0;
-
         Serial.println("loopTDSMeter waiting...");
-        tdsVal = getTDSValue();
-        Blynk.virtualWrite(V0, tdsVal);
-        Blynk.virtualWrite(V2, getTemperature());
+        meter.readTDSValue();
 
-        send_notification("tds", String(tdsVal));
-        send_notification("temp", String(getTemperature()));
+        Blynk.virtualWrite(V0, meter.getTDSValue());
+        Blynk.virtualWrite(V2, meter.getTemperature());
+
+        send_notification("tds", String(meter.getTDSValue()));
+        send_notification("temp", String(meter.getTemperature()));
 
         delay(5UL * 60UL * 60UL * 1000UL); // 5 hours wait
 
@@ -229,7 +230,7 @@ void loopPump(void* pvParameters)
         }
 
         if (turnOn == false) {
-            if (waiting < 60 * 15) {
+            if (waiting < 60 * 25) {
                 digitalWrite(relayPumpPin, LOW);
             } else {
                 turnPumpOn();
