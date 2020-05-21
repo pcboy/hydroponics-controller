@@ -8,9 +8,9 @@ private:
 public:
     TDSMeter();
     float readTemperature();
-    float getTemperature() { return temperature; };
+    float getTemperature() { return this->temperature; };
     float readTDSValue();
-    float getTDSValue() { return tdsValue; };
+    float getTDSValue() { return this->tdsValue; };
 
 private:
     int getMedianNum(int bArray[], int iFilterLen);

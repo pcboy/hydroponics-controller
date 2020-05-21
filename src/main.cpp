@@ -205,7 +205,7 @@ void loopTDSMeter(void* pvParameters)
         send_notification("temp", String(meter.getTemperature()));
 
         delay(5UL * 60UL * 60UL * 1000UL); // 5 hours wait
-
+        //delay(1UL * 60UL * 1000UL);
         // If the pump is currently ON wait a bit for the pump to finish before sampling
         while (turnOn == true) {
             Serial.println("Waiting for pump to finish before TDS testing...");
@@ -230,7 +230,7 @@ void loopPump(void* pvParameters)
         }
 
         if (turnOn == false) {
-            if (waiting < 60 * 25) {
+            if (waiting < 60 * 30) {
                 digitalWrite(relayPumpPin, LOW);
             } else {
                 turnPumpOn();

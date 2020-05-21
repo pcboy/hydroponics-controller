@@ -12,7 +12,7 @@ DallasTemperature sensors(&oneWire);
 
 #define TdsRelayPin 33
 #define VREF 3.3 // analog reference voltage(Volt) of the ADC
-#define SCOUNT 255 // sum of sample point
+#define SCOUNT 30 // sum of sample point
 int analogBuffer[SCOUNT]; // store the analog value in the array, read from ADC
 int analogBufferTemp[SCOUNT];
 int analogBufferIndex = 0, copyIndex = 0;
@@ -24,6 +24,8 @@ TDSMeter::TDSMeter()
 {
     pinMode(TdsSensorPin, INPUT);
     pinMode(TdsRelayPin, OUTPUT);
+    this->temperature = 0;
+    this->tdsValue = 0;
 }
 
 float TDSMeter::readTemperature()
@@ -32,8 +34,8 @@ float TDSMeter::readTemperature()
     sensors.begin();
     delay(1000);
     sensors.requestTemperatures();
-    temperature = sensors.getTempCByIndex(0);
-    return temperature;
+    this->temperature = sensors.getTempCByIndex(0);
+    return this->temperature;
 }
 
 float TDSMeter::readTDSValue()
@@ -44,7 +46,7 @@ float TDSMeter::readTDSValue()
     analogBufferIndex = 0;
 
     while (42) {
-        if (millis() - analogSampleTimepoint > 40U) // every 40 milliseconds,read the analog value from the ADC
+        if (millis() - analogSampleTimepoint > 40U) // every 100 milliseconds,read the analog value from the ADC
         {
             analogSampleTimepoint = millis();
             analogBuffer[analogBufferIndex] = analogRead(TdsSensorPin); //read the analog value and store into the buffer
@@ -54,11 +56,11 @@ float TDSMeter::readTDSValue()
                 for (copyIndex = 0; copyIndex < SCOUNT; copyIndex++)
                     analogBufferTemp[copyIndex] = analogBuffer[copyIndex];
 
-                float temperature = readTemperature();
+                readTemperature();
                 averageVoltage = getMedianNum(analogBufferTemp, SCOUNT) * (float)VREF / 1024.0; // read the analog value more stable by the median filtering algorithm, and convert to voltage value
-                float compensationCoefficient = 1.0 + 0.02 * (temperature - 25.0); //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.02*(fTP-25.0));
+                float compensationCoefficient = 1.0 + 0.02 * (this->temperature - 25.0); //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.02*(fTP-25.0));
                 float compensationVoltage = averageVoltage / compensationCoefficient; //temperature compensation
-                tdsValue = (133.42 * compensationVoltage * compensationVoltage * compensationVoltage - 255.86 * compensationVoltage * compensationVoltage + 857.39 * compensationVoltage) * 0.5; //convert voltage value to tds value
+                this->tdsValue = (133.42 * compensationVoltage * compensationVoltage * compensationVoltage - 255.86 * compensationVoltage * compensationVoltage + 857.39 * compensationVoltage) * 0.5; //convert voltage value to tds value
                 //Serial.print("voltage:");
                 //Serial.print(averageVoltage,2);
                 //Serial.print("V ");
@@ -67,7 +69,7 @@ float TDSMeter::readTDSValue()
                 Serial.println("ppm");
                 turnOffTDS();
 
-                return tdsValue;
+                return this->tdsValue;
             }
         }
     }
