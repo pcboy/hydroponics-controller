@@ -14,6 +14,8 @@ public:
 
 private:
     int getMedianNum(int bArray[], int iFilterLen);
+    float readTdsSensor(int numSamples, float sampleDelay);
+    float convertToPPM(float analogReading);
     void turnOnTDS();
     void turnOffTDS();
 };

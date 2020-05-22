@@ -97,7 +97,7 @@ void setupBlynk()
 {
     char auth[] = BLYNK_TOKEN;
     Blynk.begin(auth, ssid, password);
-    Blynk.syncAll();
+    //Blynk.syncAll();
 }
 
 void setupPump(void)
@@ -195,6 +195,11 @@ void loopTDSMeter(void* pvParameters)
     TDSMeter meter;
 
     while (42) {
+        // If the pump is currently ON wait a bit for the pump to finish before sampling
+        while (turnOn == true) {
+            Serial.println("Waiting for pump to finish before TDS testing...");
+            delay(1000);
+        }
         Serial.println("loopTDSMeter waiting...");
         meter.readTDSValue();
 
@@ -206,11 +211,6 @@ void loopTDSMeter(void* pvParameters)
 
         delay(5UL * 60UL * 60UL * 1000UL); // 5 hours wait
         //delay(1UL * 60UL * 1000UL);
-        // If the pump is currently ON wait a bit for the pump to finish before sampling
-        while (turnOn == true) {
-            Serial.println("Waiting for pump to finish before TDS testing...");
-            delay(1000);
-        }
     }
 }
 

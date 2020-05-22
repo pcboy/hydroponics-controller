@@ -13,8 +13,8 @@ https://www.aliexpress.com/item/4000340140634.html
 1x keyestudio TDS Meter
 https://www.aliexpress.com/item/33050818416.html
 
-2x MOSFET IRF520 modules
-https://www.aliexpress.com/item/32901197755.html
+1x MOSFET D4184 modules
+https://www.aliexpress.com/item/33038728761.html
 
 1x temperature sensor
 https://www.aliexpress.com/item/4000048728075.html
