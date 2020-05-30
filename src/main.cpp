@@ -5,6 +5,9 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 
+#include <esp_task_wdt.h>
+#include <esp_int_wdt.h>
+
 #include "secrets.h"
 #include "tds_meter.h"
 
@@ -127,6 +130,9 @@ void setup(void)
     setupBlynk();
     setupPump();
 
+    /* Init watchdog timer */
+    esp_task_wdt_init(10, false);
+
     xTaskCreatePinnedToCore(loopWifiKeepAlive, "loopWifiKeepAlive", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
     xTaskCreatePinnedToCore(loopTDSMeter, "loopTDSMeter", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
     xTaskCreatePinnedToCore(loopPump, "loopPump", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
@@ -219,6 +225,9 @@ void loopPump(void* pvParameters)
     turnOn = true;
     waiting = 0;
 
+    esp_task_wdt_add(NULL); // Attach task to watchdog
+
+
     while (42) {
         if (turnOn == true) {
             if (waiting < 60) {
@@ -237,6 +246,7 @@ void loopPump(void* pvParameters)
             }
         }
 
+        esp_task_wdt_reset(); // reset watchdog
         waiting++;
         delay(1000);
     }
