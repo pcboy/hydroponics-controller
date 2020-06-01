@@ -5,8 +5,13 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 
-#include <esp_task_wdt.h>
 #include <esp_int_wdt.h>
+#include <esp_task_wdt.h>
+
+#include <time.h>
+#define GMT_OFFSET_SEC 3600 * 9
+#define DAYLIGHT_OFFSET_SEC 0
+#define NTP_SERVER "jp.pool.ntp.org"
 
 #include "secrets.h"
 #include "tds_meter.h"
@@ -100,7 +105,7 @@ void setupBlynk()
 {
     char auth[] = BLYNK_TOKEN;
     Blynk.begin(auth, ssid, password);
-    //Blynk.syncAll();
+    Blynk.syncAll();
 }
 
 void setupPump(void)
@@ -132,6 +137,8 @@ void setup(void)
 
     /* Init watchdog timer */
     esp_task_wdt_init(10, false);
+
+    configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
 
     xTaskCreatePinnedToCore(loopWifiKeepAlive, "loopWifiKeepAlive", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
     xTaskCreatePinnedToCore(loopTDSMeter, "loopTDSMeter", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
@@ -222,15 +229,25 @@ void loopTDSMeter(void* pvParameters)
 
 void loopPump(void* pvParameters)
 {
+    struct tm timeinfo;
+
     turnOn = true;
     waiting = 0;
 
     esp_task_wdt_add(NULL); // Attach task to watchdog
 
-
     while (42) {
+        int secToWait = 60 * 30;
+
+        if (getLocalTime(&timeinfo)) {
+            /* During the day increase the watering schedule frequency */
+            if (timeinfo.tm_hour < 20 && timeinfo.tm_hour > 5) {
+                secToWait = 60 * 15;
+            }
+        }
+
         if (turnOn == true) {
-            if (waiting < 60) {
+            if (waiting < 60 * 1) {
                 digitalWrite(relayPumpPin, HIGH);
             } else {
                 turnPumpOff();
@@ -239,7 +256,7 @@ void loopPump(void* pvParameters)
         }
 
         if (turnOn == false) {
-            if (waiting < 60 * 30) {
+            if (waiting < secToWait) {
                 digitalWrite(relayPumpPin, LOW);
             } else {
                 turnPumpOn();
