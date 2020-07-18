@@ -36,7 +36,7 @@ https://www.thingiverse.com/thing:3405964
 
 Currently my tower is still small as I'm testing the viability first.  
 
-<a href="https://i.imgur.com/mn3WsYr.jpg"><img src="https://i.imgur.com/mn3WsYr.jpg" width="100%"/></a>
+<a href="assets/tower.jpg"><img src="assets/tower.jpg" width="100%"/></a>
 
 Tower is connected to a 100W solar panel connected to a battery. 
 
