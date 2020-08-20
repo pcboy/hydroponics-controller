@@ -26,7 +26,7 @@ const char* password = WIFI_PASSWORD;
 #define INFLUXDB_PASSWORD "hydroponics"
 
 #define WIFI_TIMEOUT_MS 20000 // 20 second WiFi connection timeout
-#define WIFI_RECOVER_TIME_MS 30000 // Wait 30 seconds after a failed connection attempt
+#define WIFI_RECOVER_TIME_MS 5000 // Wait 5 seconds after a failed connection attempt
 
 #if CONFIG_FREERTOS_UNICORE
 #define ARDUINO_RUNNING_CORE 0
@@ -34,21 +34,29 @@ const char* password = WIFI_PASSWORD;
 #define ARDUINO_RUNNING_CORE 1
 #endif
 
+#define HOSTNAME "hydroponic-controller"
+
 int waiting = 0;
 bool turnOn = true;
 
 void loopWifiKeepAlive(void* pvParameters);
 void loopPump(void* pvParameters);
 
-void send_notification(String key, String value)
+void send_notification(char const* key, char const* value)
 {
     HTTPClient http;
-    http.begin(INFLUXDB_URI);
-    http.addHeader("Content-Type", "text/plain");
-    http.setAuthorization(INFLUXDB_USER, INFLUXDB_PASSWORD);
-    http.POST("hydroponicsController,device=hydroponicsController " + key + "=" + value);
-    http.end();
-    Serial.println("Notification sent: " + value);
+    char message[255] = { 0 };
+    char url[1024] = { 0 };
+
+    if (WiFi.status() == WL_CONNECTED) {
+        http.begin(INFLUXDB_URI);
+        http.addHeader("Content-Type", "text/plain");
+        http.setAuthorization(INFLUXDB_USER, INFLUXDB_PASSWORD);
+        snprintf(url, sizeof(url), "hydroponicsController,device=hydroponicsController %s=%s", key, value);
+        http.POST(url);
+        http.end();
+        snprintf(message, sizeof(message), "Notification sent: %s", value);
+    }
 }
 
 void OTASetup()
@@ -57,7 +65,7 @@ void OTASetup()
     // ArduinoOTA.setPort(3232);
 
     // Hostname defaults to esp3232-[MAC]
-    ArduinoOTA.setHostname("hydroponic-controller");
+    ArduinoOTA.setHostname(HOSTNAME);
 
     // No authentication by default
     // ArduinoOTA.setPassword("admin");
@@ -126,7 +134,7 @@ void setup(void)
     WiFi.begin(ssid, password);
 
     while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
         Serial.print(".");
     }
     Serial.print("connected");
@@ -135,21 +143,21 @@ void setup(void)
     setupBlynk();
     setupPump();
 
-    /* Init watchdog timer */
-    esp_task_wdt_init(10, false);
-
     configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
 
-    xTaskCreatePinnedToCore(loopWifiKeepAlive, "loopWifiKeepAlive", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
+    /* Init watchdog timer */
+    esp_task_wdt_init(3, false);
+
+    xTaskCreatePinnedToCore(loopWifiKeepAlive, "loopWifiKeepAlive", 4096, NULL, 3, NULL, ARDUINO_RUNNING_CORE);
+    xTaskCreatePinnedToCore(loopPump, "loopPump", 4096, NULL, 2, NULL, 0);
     xTaskCreatePinnedToCore(loopTDSMeter, "loopTDSMeter", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
-    xTaskCreatePinnedToCore(loopPump, "loopPump", 4096, NULL, 1, NULL, ARDUINO_RUNNING_CORE);
 }
 
 void turnPumpOff()
 {
     turnOn = false;
     waiting = 0;
-    send_notification("pump", String(0));
+    send_notification("pump", "0");
     Blynk.virtualWrite(V1, LOW);
 }
 
@@ -157,7 +165,7 @@ void turnPumpOn()
 {
     turnOn = true;
     waiting = 0;
-    send_notification("pump", String(1));
+    send_notification("pump", "1");
 
     Blynk.virtualWrite(V1, HIGH);
 }
@@ -173,23 +181,28 @@ BLYNK_WRITE(V1) // Button to turn the pump on/off
     }
 }
 
+
 void loopWifiKeepAlive(void* pvParameters)
 {
+    esp_task_wdt_add(NULL); // Attach task to watchdog
     while (42) {
+        esp_task_wdt_reset(); // reset watchdog
+
         if (WiFi.status() == WL_CONNECTED) {
-            vTaskDelay(10000 / portTICK_PERIOD_MS);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
         }
 
         Serial.println("[WIFI] Connecting");
-        //WiFi.mode(WIFI_STA);
+        // WiFi.mode(WIFI_STA);
         WiFi.begin(ssid, password);
 
         unsigned long startAttemptTime = millis();
 
         // Keep looping while we're not connected and haven't reached the timeout
-        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS)
-            ;
+        while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT_MS) {
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+        }
 
         // When we couldn't make a WiFi connection (or the timeout expired)
         // sleep for a while and then retry.
@@ -211,7 +224,7 @@ void loopTDSMeter(void* pvParameters)
         // If the pump is currently ON wait a bit for the pump to finish before sampling
         while (turnOn == true) {
             Serial.println("Waiting for pump to finish before TDS testing...");
-            delay(1000);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
         Serial.println("loopTDSMeter waiting...");
         meter.readTDSValue();
@@ -219,11 +232,16 @@ void loopTDSMeter(void* pvParameters)
         Blynk.virtualWrite(V0, meter.getTDSValue());
         Blynk.virtualWrite(V2, meter.getTemperature());
 
-        send_notification("tds", String(meter.getTDSValue()));
-        send_notification("temp", String(meter.getTemperature()));
+        char tdsValueStr[8] = { 0 };
+        char temperatureStr[8] = { 0 };
 
-        delay(5UL * 60UL * 60UL * 1000UL); // 5 hours wait
-        //delay(1UL * 60UL * 1000UL);
+        snprintf(tdsValueStr, sizeof(tdsValueStr), "%f", meter.getTDSValue());
+        snprintf(temperatureStr, sizeof(temperatureStr), "%f", meter.getTemperature());
+
+        send_notification("tds", tdsValueStr);
+        send_notification("temp", temperatureStr);
+
+        vTaskDelay(5UL * 60UL * 60UL * 1000UL / portTICK_PERIOD_MS); // 5 hours wait
     }
 }
 
@@ -234,7 +252,6 @@ void loopPump(void* pvParameters)
     turnOn = true;
     waiting = 0;
 
-    esp_task_wdt_add(NULL); // Attach task to watchdog
 
     while (42) {
         int secToWait = 60 * 30;
@@ -250,6 +267,7 @@ void loopPump(void* pvParameters)
             if (waiting < 60 * 1) {
                 digitalWrite(relayPumpPin, HIGH);
             } else {
+                waiting = 0;
                 turnPumpOff();
                 //esp_deep_sleep(15 * 60 * 1000 * 1000); // 15 minutes
             }
@@ -259,13 +277,13 @@ void loopPump(void* pvParameters)
             if (waiting < secToWait) {
                 digitalWrite(relayPumpPin, LOW);
             } else {
+                waiting = 0;
                 turnPumpOn();
             }
         }
 
-        esp_task_wdt_reset(); // reset watchdog
         waiting++;
-        delay(1000);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
 

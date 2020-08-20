@@ -105,13 +105,14 @@ float TDSMeter::readTdsSensor(int numSamples, float sampleDelay)
 
 float TDSMeter::readTDSValue()
 {
-    turnOnTDS();
+    //turnOnTDS();
+
 
     this->readTemperature();
-    float sensorReading = readTdsSensor(TDS_NUM_SAMPLES, SAMPLE_DELAY);
-    this->tdsValue = convertToPPM(sensorReading);
-
-    turnOffTDS();
+    //float sensorReading = readTdsSensor(TDS_NUM_SAMPLES, SAMPLE_DELAY);
+    //this->tdsValue = convertToPPM(sensorReading);
+    this->tdsValue = 0;
+    //turnOffTDS();
     return this->tdsValue;
 }
 
